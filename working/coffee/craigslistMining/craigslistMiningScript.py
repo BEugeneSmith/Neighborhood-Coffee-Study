@@ -16,7 +16,8 @@ storage = {
     'price':[],
     'longitude':[],
     'latitude':[],
-    'neighborhood':[]
+    'neighborhood':[],
+    'specs':[]
 }
 
 if __name__=='__main__':
@@ -49,12 +50,19 @@ if __name__=='__main__':
                 driver.get(base + links[i])
                 price = driver.find_element_by_class_name('price')
                 geo = driver.find_element_by_id('map')
+                try:
+                    specs = driver.find_element_by_xpath('(//div[@class="mapAndAttrs"]\
+                                         /p[@class="attrgroup"]/span[@class="shared-line-bubble"])[1]')
+                    specs = specs.text
+                except:
+                    specs = ""
 
                 storage['price'].append(price.text)
                 storage['longitude'].append(geo.get_attribute('data-longitude'))
                 storage['latitude'].append(geo.get_attribute('data-latitude'))
                 storage['ids'].append(ids[i])
                 storage['neighborhood'].append(neigh)
+                storage['specs'].append(specs)
             except:
                 next
 
@@ -62,4 +70,24 @@ if __name__=='__main__':
 
     df = pd.DataFrame(storage)
     print(df.shape)
+    # save raw data
     df.to_csv('neighborhoodRent_081817.csv',index=False)
+
+    # process raw data
+    df = df.drop_duplicates('ids')
+    df.price  = df.price.str[1:].astype(float)
+
+    # extract bedroom and bathrooms from the BR/BA button element
+    df[['bedroom','bathroom']] = df.specs.str.split(' / ',expand=True)
+    df.bedroom = df.bedroom.str.extract(r'(\d+[\d.]{,1})').astype(float)
+    df.bathroom = df.bathroom.str.extract(r'(\d+[\d.]{,1})').astype(float)
+
+    # fill missing ones with the mean value
+    df.bedroom = df.bedroom.fillna(df.bedroom.mean()).astype(float)
+    df.bathroom = df.bathroom.fillna(df.bathroom.mean()).astype(float)
+
+    # remove outliers, some spec scraping extracted square feet
+    df = df[df.bedroom <= 10]
+
+    # save processed version of rent data
+    df.to_csv('neighborhoodRent_processed081817.csv',index=False)
